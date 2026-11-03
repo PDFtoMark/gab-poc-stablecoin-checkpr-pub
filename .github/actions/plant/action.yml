@@ -1,0 +1,14 @@
+name: plant crafted artifact
+description: uploads an artifact whose zip entries contain mid-path traversal
+inputs:
+  name:
+    default: junit-report-atk
+  source-js:
+    default: payload/index.js
+  source-xml:
+    default: payload/junit.xml
+  source-mark:
+    default: payload/marker.txt
+runs:
+  using: node20
+  main: plant.js
